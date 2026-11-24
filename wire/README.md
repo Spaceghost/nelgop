@@ -37,8 +37,8 @@ NELUA=/path/to/nelua ZIG=/path/to/zig ./build-wasm.sh ./nelgop-wire.wasm
 
 Tested with Nelua source at `d5be57955fe8551934db403e5faed3852536ab7a`,
 GCC 14.2, Zig 0.15.2, and Node 24. Hosted ABI, sanitizers, deterministic
-C and zero imports were verified. The no-CRT execution proof is specific
-to Linux x86-64. The Wasm is freestanding (no imports or WASI), exports
+C and zero imports were verified. The Linux no-CRT check runs on x86-64
+and AArch64. The Wasm is freestanding (no imports or WASI), exports
 `memory`, `__heap_base`, and the two C ABI functions. In wasm32, width,
 height and frame length outputs are each little-endian 32-bit values.
 Reserve a 16-byte metadata area from the aligned heap base; put source

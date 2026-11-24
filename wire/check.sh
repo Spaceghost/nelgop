@@ -15,13 +15,18 @@ set -- -std=c11 -Os -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack
 "$CC" "$@" -DGOP_HOSTED "$d/abi.c" "$src/host.c" -o "$d/host"
 "$d/host"
 printf 'Hosted C ABI and deterministic zero-import object: PASS\n'
-if [ "$(uname -s -m)" = 'Linux x86_64' ]; then
-  "$CC" "$@" -fno-pie -static -nostdlib -Wl,-e,_start "$d/abi.c" "$src/host.c" "$src/start_linux_x86_64.S" -o "$d/no-crt"
+arch=$(uname -m)
+startup=
+case "$(uname -s) $arch" in
+  'Linux x86_64'|'Linux aarch64') startup="$src/start_linux_$arch.S" ;;
+esac
+if [ -n "$startup" ]; then
+  "$CC" "$@" -fno-pie -static -nostdlib -Wl,-e,_start "$d/abi.c" "$src/host.c" "$startup" -o "$d/no-crt"
   [ -z "$(nm -u "$d/no-crt")" ]
   ! readelf -l "$d/no-crt" | grep -q INTERP
   ! readelf -d "$d/no-crt" | grep -Eq '\((NEEDED|INIT|INIT_ARRAY)\)'
   "$d/no-crt"
-  printf 'Linux x86-64 C ABI, static no-CRT execution: PASS\n'
+  printf 'Linux %s C ABI, static no-CRT execution: PASS\n' "$arch"
 fi
 if [ "${SANITIZE:-0}" = 1 ]; then
   "$CC" "$@" -DGOP_HOSTED -fsanitize=address,undefined -fno-omit-frame-pointer "$d/abi.c" "$src/host.c" -o "$d/san"

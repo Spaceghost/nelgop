@@ -8,10 +8,12 @@ static bool unchanged(const uint8_t *v, uintptr_t len) {
     return true;
 }
 int gop_selftest(void) {
-    uint8_t src[]=SAMPLE, max_frame[]=MAX_FRAME;
+    /* Static initializers avoid a compiler-emitted memcpy in the no-CRT test. */
+    static uint8_t src[]=SAMPLE, max_frame[]=MAX_FRAME;
+    static const uint8_t bytes[]={0x23,0xff,0,255,0,1,2,255,10,32,13,255,255,238,221,255};
     uint32_t width=99,height=100;
     uintptr_t total=555;
-    uint8_t out[20], bytes[]={0x23,0xff,0,255,0,1,2,255,10,32,13,255,255,238,221,255};
+    uint8_t out[20];
     const uintptr_t n=sizeof(src)-1;
     CHECK(!nelgop_wire_header(src,23,&width,&height,&total));
     CHECK(width==99 && height==100 && total==555);
@@ -21,7 +23,11 @@ int gop_selftest(void) {
     CHECK(!nelgop_wire_header(src,24,&width,&height,0));
     CHECK(nelgop_wire_header(max_frame,24,&width,&height,&total));
     CHECK(width==4096 && height==2160 && total==53088520);
-    max_frame[21]='1'; CHECK(!nelgop_wire_header(max_frame,24,&width,&height,&total));
+    uint8_t original=max_frame[21];
+    max_frame[21]='1';
+    bool accepted=nelgop_wire_header(max_frame,24,&width,&height,&total);
+    max_frame[21]=original;
+    CHECK(!accepted);
     CHECK(width==4096 && height==2160 && total==53088520);
     for(uintptr_t i=0;i<sizeof(out);i++) out[i]=77;
     CHECK(!nelgop_wire_rgba(src,n,out,15) && unchanged(out,sizeof(out)));
