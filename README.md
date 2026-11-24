@@ -35,6 +35,12 @@ no-CRT test as proof that firmware on a physical board works.
 
 ## Verification scope
 
+The [AArch64 firmware smoke test](uefi/#aarch64-firmware-smoke-test)
+passed under QEMU TCG with Fedora AArch64 EDK2 in Incus. It exercises
+live GOP and Serial I/O calls and checks every byte of a two-color
+160×100 capture. The Wasm decoder also matched all 48,000 RGB channel
+bytes against the expected test pattern.
+
 A private native x86-64 QEMU/OVMF witness emitted a real 160×100 GOP
 capture with 31 colors. The Wasm decoder's RGB output matched the
 center-sampled, independently captured 1280×800 HMP screenshot in all

@@ -12,7 +12,7 @@ local blts:usize = 0
 local stop_on:usize = 999
 local stopped:boolean = false
 
-local function write(ctx:pointer,n:*usize,buf:*uint8):usize <ms_abi>
+local function mock_write(ctx:pointer,n:*usize,buf:*uint8):usize
   assert(ctx == (@pointer)(&serial))
   if stopped then $n=0; return 0 end
   -- Force partial writes to check retry semantics.
@@ -24,15 +24,15 @@ local function write(ctx:pointer,n:*usize,buf:*uint8):usize <ms_abi>
   used=used+$n
   return 0
 end
-local function locate(g:*gop.Guid, registration:pointer, out:*pointer):usize <ms_abi>
+local function mock_locate(g:*gop.Guid, registration:pointer, out:*pointer):usize
   assert(registration == nilptr)
   if g == &gop.guid then $out = &display
   elseif g == &gop_serial.guid then $out = &serial
   else return 1 end
   return 0
 end
-local function blt(ctx:pointer, buf:*gop.Pixel, op:uint32, x:usize, y:usize, dx:usize, dy:usize,
-                   w:usize, h:usize, stride:usize):usize <ms_abi>
+local function mock_blt(ctx:pointer, buf:*gop.Pixel, op:uint32, x:usize, y:usize, dx:usize, dy:usize,
+                   w:usize, h:usize, stride:usize):usize
   assert(ctx == (@pointer)(&display))
   assert(op == 1 and x == 0 and dx == 0 and dy == 0 and w == 1920 and h == 1 and stride == 0)
   assert(y == ((2*blts+1)*1080)//200)
@@ -42,6 +42,23 @@ local function blt(ctx:pointer, buf:*gop.Pixel, op:uint32, x:usize, y:usize, dx:
   blts=blts+1
   return 0
 end
+## if ccinfo.is_arm64 then
+local write = mock_write
+local locate = mock_locate
+local blt = mock_blt
+## else
+local function write(ctx:pointer,n:*usize,buf:*uint8):usize <ms_abi>
+  return mock_write(ctx,n,buf)
+end
+local function locate(g:*gop.Guid,registration:pointer,out:*pointer):usize <ms_abi>
+  return mock_locate(g,registration,out)
+end
+local function blt(ctx:pointer,buf:*gop.Pixel,op:uint32,x:usize,y:usize,dx:usize,dy:usize,
+                   w:usize,h:usize,stride:usize):usize <ms_abi>
+  return mock_blt(ctx,buf,op,x,y,dx,dy,w,h,stride)
+end
+## end
+
 local function expect(pos:usize,s:cstring,n:usize)
   local p=(@*[0]uint8)(s)
   for i:usize=0,<n do assert(got[pos+i]==p[i]) end

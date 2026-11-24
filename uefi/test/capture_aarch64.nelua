@@ -1,0 +1,25 @@
+## pragmas.freestanding = true
+## pragmas.nochecks = true
+require 'gop'
+require 'gop_serial'
+
+-- Only the System Table's BootServices pointer and LocateProtocol matter here.
+local Services = @record{header:[3]uint64, preceding:[37]pointer, locate:gop.Locate}
+local System = @record{preceding:[12]uint64, boot:*Services}
+
+local function efi_main(image:pointer, st:*System):usize <cexport, codename 'efi_main'>
+  if st == nilptr or st.boot == nilptr then return 1 end
+  local locate = st.boot.locate
+  local display = gop.open(locate)
+  if display == nilptr or display.mode == nilptr or display.mode.info == nilptr then return 2 end
+  local width:usize = display.mode.info.width
+  local height:usize = display.mode.info.height
+  -- On an even-width display, center sampling produces 80 pixels of each color.
+  if width < 160 or width > 4096 or width % 2 ~= 0 or height < 100 then return 3 end
+  local red:gop.Pixel = {0,0,255,0}
+  local green:gop.Pixel = {0,255,0,0}
+  if display.blt(display,&red,0,0,0,0,0,width//2,height,0) ~= 0 then return 4 end
+  if display.blt(display,&green,0,0,0,width//2,0,width//2,height,0) ~= 0 then return 5 end
+  if not gop_serial.capture(locate) then return 6 end
+  return 0
+end

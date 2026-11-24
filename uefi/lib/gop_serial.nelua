@@ -1,8 +1,13 @@
 require 'gop'
 global gop_serial = @record{}
+## if ccinfo.is_arm64 then
+local SerialWrite: type = @function(pointer, *usize, *uint8): usize
+## else
+local SerialWrite: type = @function<ms_abi>(pointer, *usize, *uint8): usize
+## end
 global gop_serial.Protocol: type = @record{
   revision:uint32, reset:pointer, set_attrs:pointer, set_control:pointer, get_control:pointer,
-  write:function<ms_abi>(pointer, *usize, *uint8):usize,
+  write:SerialWrite,
 }
 global gop_serial.guid: gop.Guid = {0xbb25cf6f,0xf1d4,0x11d2,{0x9a,0x0c,0x00,0x90,0x27,0x3f,0xc1,0xfd}}
 local Cols:usize <comptime> = 160
@@ -27,7 +32,7 @@ local function hex(out:*[0]uint8, pos:usize, n:uint8)
 end
 local function row(ctx:pointer,y:usize, pixels:*gop.Row,w:usize):boolean
   local s = (@*gop_serial.Protocol)(ctx)
-  local line:[Cols*6+2]uint8
+  local line:[Cols*6+2]uint8 <noinit>
   for x:usize=0,<Cols do
     local p = pixels[((2*x+1)*w)//(2*Cols)]
     hex(&line,x*6,p.red)
