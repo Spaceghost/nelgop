@@ -1,0 +1,37 @@
+-- x86-64 boot services only; call before ExitBootServices.
+global gop = @record{}
+global gop.Guid: type = @record{a: uint32, b: uint16, c: uint16, d: [8]uint8}
+global gop.Locate: type = @function<ms_abi>(*gop.Guid, pointer, *pointer): usize
+global gop.Pixel: type = @record{blue:uint8, green:uint8, red:uint8, reserved:uint8}
+global gop.Info: type = @record{revision:uint32, width:uint32, height:uint32}
+global gop.Mode: type = @record{max:uint32, current:uint32, info:*gop.Info}
+global gop.Protocol: type = @record{
+  query:pointer, set:pointer,
+  blt:function<ms_abi>(pointer, *gop.Pixel, uint32, usize, usize, usize, usize, usize, usize, usize):usize,
+  mode:*gop.Mode,
+}
+global gop.guid: gop.Guid = {0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a}}
+global gop.Row: type = @[4096]gop.Pixel
+global gop.Consumer: type = @function(pointer, usize, *gop.Row, usize): boolean
+
+function gop.open(locate:gop.Locate):*gop.Protocol
+  local p:pointer
+  if locate(&gop.guid,nilptr,&p) ~= 0 then return nilptr end
+  return (@*gop.Protocol)(p)
+end
+
+-- Bounded and allocation-free. The row is borrowed only during the callback.
+-- EFI's standard BLT operation normalizes framebuffer format/stride.
+function gop.sample(g:*gop.Protocol, rows:usize, consume:gop.Consumer, ctx:pointer):boolean
+  if g == nilptr or g.mode == nilptr or g.mode.info == nilptr then return false end
+  local w:usize = g.mode.info.width
+  local h:usize = g.mode.info.height
+  if w == 0 or w > 4096 or h == 0 or rows == 0 or rows > h or rows > 100 then return false end
+  local row:gop.Row
+  for y:usize = 0, <rows do
+    local sy = ((2*y+1)*h)//(2*rows)
+    if g.blt(g, &row[0], 1, 0, sy, 0, 0, w, 1, 0) ~= 0 then return false end
+    if not consume(ctx, y, &row, w) then return false end
+  end
+  return true
+end

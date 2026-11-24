@@ -1,0 +1,21 @@
+## pragmas.freestanding = true
+## pragmas.nochecks = true -- Every byte access is checked locally before use.
+local wire = require 'gop_wire'
+
+local function nelgop_wire_header(src: *[0]uint8, len: usize,
+                                  w: *[0]uint32, h: *[0]uint32,
+                                  size: *[0]usize): boolean
+  <cexport, codename 'nelgop_wire_header'>
+  if w == nilptr or h == nilptr or size == nilptr or w == h or
+     (@pointer)(w) == (@pointer)(size) or (@pointer)(h) == (@pointer)(size) then return false end
+  local ok, width, height, frame_len = wire.header(src, len)
+  if not ok then return false end
+  w[0], h[0], size[0] = width, height, frame_len
+  return true
+end
+
+local function nelgop_wire_rgba(src: *[0]uint8, len: usize,
+                                dst: *[0]uint8, dst_len: usize): boolean
+  <cexport, codename 'nelgop_wire_rgba'>
+  return wire.rgba(src, len, dst, dst_len)
+end

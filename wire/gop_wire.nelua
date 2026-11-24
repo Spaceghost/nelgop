@@ -1,0 +1,81 @@
+-- Nelgop v1 decoder: exactly one ASCII RGB888 capture with CRLF line endings.
+-- Caller owns all storage. Input and output must be disjoint, valid byte spans.
+local wire = @record{}
+local header_len: usize <comptime> = 24
+local trailer_len: usize <comptime> = 16
+local max_width: usize <comptime> = 4096
+local max_height: usize <comptime> = 2160
+local prefix: string <comptime> = 'NEBOOT-GOP/1 '
+local trailer: string <comptime> = 'NEBOOT-GOP/END\r\n'
+
+local function nibble(c: uint8): uint8 <inline>
+  if c >= 48 and c <= 57 then return c - 48 end
+  if c >= 97 and c <= 102 then return c - 87 end
+  return 255
+end
+
+local function hex4(src: *[0]uint8, i: usize): usize
+  local n: usize = 0
+  for j: usize=i,<i+4 do
+    local digit = nibble(src[j])
+    if digit == 255 then return 0 end
+    n = n * 16 + (@usize)(digit)
+  end
+  return n
+end
+
+local function literal_eq(src: *[0]uint8, i: usize, s: string): boolean
+  for j: usize=0,<s.size do
+    if src[i + j] ~= s.data[j] then return false end
+  end
+  return true
+end
+
+function wire.header(src: *[0]uint8, len: usize): (boolean, uint32, uint32, usize)
+  if src == nilptr or len < header_len or not literal_eq(src, 0, prefix) or
+     src[17] ~= 32 or src[22] ~= 13 or src[23] ~= 10 then
+    return false, 0, 0, 0
+  end
+  local w = hex4(src, 13)
+  local h = hex4(src, 18)
+  if w == 0 or w > max_width or h == 0 or h > max_height then
+    return false, 0, 0, 0
+  end
+  -- The maximum dimensions bound each multiplication even on wasm32.
+  return true, (@uint32)(w), (@uint32)(h), header_len + h * (w * 6 + 2) + trailer_len
+end
+
+function wire.rgba(src: *[0]uint8, src_len: usize,
+                   dst: *[0]uint8, dst_len: usize): boolean
+  local ok, width, height, frame_len = wire.header(src, src_len)
+  if not ok or src_len ~= frame_len or dst == nilptr then return false end
+  local w, h = (@usize)(width), (@usize)(height)
+  if dst_len < w * h * 4 or not literal_eq(src, frame_len - trailer_len, trailer) then
+    return false
+  end
+  local row_hex = w * 6
+  -- Validate the entire frame before any output writes. A later bad row
+  -- never leaks a partly updated screen to the caller.
+  for y: usize=0,<h do
+    local i = header_len + y * (row_hex + 2)
+    for j: usize=i,<i+row_hex do
+      if nibble(src[j]) == 255 then return false end
+    end
+    if src[i+row_hex] ~= 13 or src[i+row_hex+1] ~= 10 then return false end
+  end
+  local j: usize = 0
+  for y: usize=0,<h do
+    local row = header_len + y * (row_hex + 2)
+    for x: usize=0,<w do
+      local i = row + x * 6
+      dst[j] = nibble(src[i]) * 16 + nibble(src[i+1])
+      dst[j+1] = nibble(src[i+2]) * 16 + nibble(src[i+3])
+      dst[j+2] = nibble(src[i+4]) * 16 + nibble(src[i+5])
+      dst[j+3] = 255
+      j = j + 4
+    end
+  end
+  return true
+end
+
+return wire

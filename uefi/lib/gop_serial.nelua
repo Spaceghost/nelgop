@@ -1,0 +1,52 @@
+require 'gop'
+global gop_serial = @record{}
+global gop_serial.Protocol: type = @record{
+  revision:uint32, reset:pointer, set_attrs:pointer, set_control:pointer, get_control:pointer,
+  write:function<ms_abi>(pointer, *usize, *uint8):usize,
+}
+global gop_serial.guid: gop.Guid = {0xbb25cf6f,0xf1d4,0x11d2,{0x9a,0x0c,0x00,0x90,0x27,0x3f,0xc1,0xfd}}
+local Cols:usize <comptime> = 160
+local Rows:usize <comptime> = 100
+
+local function send(s:*gop_serial.Protocol, p:*[0]uint8, total:usize):boolean
+  local off:usize = 0
+  while off < total do
+    local n:usize = total-off
+    if s.write(s,&n,&p[off]) ~= 0 or n == 0 or n > total-off then return false end
+    off = off+n
+  end
+  return true
+end
+
+local function digit(n:uint8):uint8
+  return n < 10 and 48+n or 87+n
+end
+local function hex(out:*[0]uint8, pos:usize, n:uint8)
+  out[pos]=digit(n>>4)
+  out[pos+1]=digit(n&15)
+end
+local function row(ctx:pointer,y:usize, pixels:*gop.Row,w:usize):boolean
+  local s = (@*gop_serial.Protocol)(ctx)
+  local line:[Cols*6+2]uint8
+  for x:usize=0,<Cols do
+    local p = pixels[((2*x+1)*w)//(2*Cols)]
+    hex(&line,x*6,p.red)
+    hex(&line,x*6+2,p.green)
+    hex(&line,x*6+4,p.blue)
+  end
+  line[Cols*6]=13
+  line[Cols*6+1]=10
+  return send(s,&line,#line)
+end
+
+function gop_serial.capture(locate:gop.Locate):boolean
+  local g = gop.open(locate)
+  if g == nilptr or g.mode == nilptr or g.mode.info == nilptr then return false end
+  if g.mode.info.width < Cols or g.mode.info.width > 4096 or g.mode.info.height < Rows then return false end
+  local p:pointer
+  if locate(&gop_serial.guid,nilptr,&p) ~= 0 or p == nilptr then return false end
+  local serial = (@*gop_serial.Protocol)(p)
+  if not send(serial,(@*[0]uint8)((@cstring)('NEBOOT-GOP/1 00a0 0064\r\n')),24) then return false end
+  if not gop.sample(g,Rows,row,serial) then return false end
+  return send(serial,(@*[0]uint8)((@cstring)('NEBOOT-GOP/END\r\n')),16)
+end

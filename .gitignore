@@ -1,0 +1,9 @@
+/build/
+/cache/
+*.efi
+*.EFI
+*.lib
+*.o
+*.obj
+*.wasm
+*.gz
